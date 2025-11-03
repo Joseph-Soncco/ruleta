@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ruleta rápida — lista completa aleatoria</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    background: radial-gradient(circle at center, #07183a, #050b16);
+    color: #e6eef6;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+  }
+  .app {
+    width: 95%;
+    max-width: 900px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.4);
+  }
+  h1 {text-align:center; font-size:20px; margin-top:0;}
+  textarea {
+    width: 100%;
+    height: 180px;
+    background: #020817;
+    color: #fff;
+    border: 1px solid #0a1328;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 14px;
+    resize: vertical;
+  }
+  button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: #10b981;
+    color: #021014;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: transparent;
+    border: 1px solid #3a3a3a;
+    color: #9aa7b2;
+  }
+  .wheel-container {
+    position: relative;
+    width: 350px;
+    height: 350px;
+    margin: 20px auto;
+    overflow: visible;
+  }
+  .wheel {
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    border: 4px solid #10b981;
+    position: relative;
+    overflow: visible;
+    transition: transform 0.1s linear;
+    margin: 0 auto;
+  }
+  .wheel-segment {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50%;
+    height: 50%;
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+  .wheel-name {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    white-space: nowrap;
+    text-align: center;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5);
+    transform-origin: center;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .wheel-pointer {
+    position: absolute;
+    top: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 15px solid transparent;
+    border-right: 15px solid transparent;
+    border-bottom: 25px solid #fff;
+    z-index: 10;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  .result-display {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #10b981;
+    min-height: 30px;
+  }
+  .results {
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 240px;
+    overflow: auto;
+  }
+  ol {margin: 0; padding-left: 18px;}
+</style>
+</head>
+<body>
+  <div class="app">
+    <h1>Ruleta rápida — lista completa aleatoria</h1>
+    <label>Ingresa los nombres (uno por línea):</label>
+    <textarea id="names" placeholder="Ej: Ana&#10;Luis&#10;María&#10;Carlos..."></textarea>
+    <div style="margin-top:10px; display:flex; gap:10px;">
+      <button id="spinBtn">🎯 Girar</button>
+      <button id="clearBtn" class="secondary">Limpiar</button>
+    </div>
+    <div class="wheel-container">
+      <div class="wheel-pointer"></div>
+      <div class="wheel" id="wheel"></div>
+    </div>
+    <div class="result-display" id="resultDisplay"></div>
+    <div class="results">
+      <div style="font-size:13px; color:#9aa7b2;">Asignación por color (orden aleatorio)</div>
+      <ol id="list"></ol>
+    </div>
+  </div>
+
+<script>
+function shuffle(array) {
+  // Fisher-Yates perfecto para aleatoriedad real
+  let arr = array.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Colores disponibles para la ruleta
+const COLORS = [
+  { name: 'Verde', value: '#10b981' },
+  { name: 'Azul', value: '#0ea5e9' },
+  { name: 'Naranja', value: '#f97316' },
+  { name: 'Rojo', value: '#ef4444' },
+  { name: 'Morado', value: '#a855f7' },
+  { name: 'Verde claro', value: '#22c55e' },
+  { name: 'Rosa', value: '#ec4899' },
+  { name: 'Amarillo', value: '#eab308' },
+  { name: 'Cian', value: '#06b6d4' },
+  { name: 'Índigo', value: '#6366f1' }
+];
+
+const namesField = document.getElementById('names');
+const wheel = document.getElementById('wheel');
+const listEl = document.getElementById('list');
+const resultDisplay = document.getElementById('resultDisplay');
+const spinBtn = document.getElementById('spinBtn');
+const clearBtn = document.getElementById('clearBtn');
+
+let spinning = false;
+let currentAssignment = [];
+let currentSegments = [];
+
+function createWheel(names) {
+  // Limpiar ruleta anterior
+  wheel.innerHTML = '';
+  currentSegments = [];
+  
+  // Asignar nombres a colores aleatoriamente
+  const shuffledNames = shuffle(names);
+  const usedColors = COLORS.slice(0, names.length);
+  const shuffledColors = shuffle(usedColors);
+  
+  currentAssignment = shuffledNames.map((name, index) => ({
+    name: name,
+    color: shuffledColors[index],
+    angle: (360 / names.length) * index,
+    segmentSize: 360 / names.length
+  }));
+  
+  // Calcular tamaño de fuente según cantidad de nombres (más grande)
+  const fontSize = names.length > 8 ? 16 : names.length > 6 ? 18 : names.length > 4 ? 20 : 22;
+  
+  // Radio de la ruleta (150px es la mitad de 300px)
+  const radius = 150;
+  // Distancia desde el centro para posicionar el texto (bien centrado en el segmento)
+  const textDistance = radius * 0.4;
+  
+  // Crear segmentos de la ruleta
+  const gradientStops = [];
+  currentAssignment.forEach((item, index) => {
+    const startAngle = item.angle;
+    const endAngle = startAngle + item.segmentSize;
+    
+    // Convertir ángulos a gradiente cónico
+    const start = startAngle;
+    const end = endAngle;
+    
+    gradientStops.push(`${item.color.value} ${start}deg ${end}deg`);
+    
+    // Calcular el ángulo medio del segmento en grados y radianes
+    const midAngleDeg = startAngle + item.segmentSize / 2;
+    const midAngleRad = midAngleDeg * Math.PI / 180;
+    
+    // Calcular posición x,y usando coordenadas polares desde el centro de la ruleta
+    // El ángulo 0 está arriba, así que ajustamos restando 90 grados
+    const angleFromTop = midAngleRad - Math.PI / 2;
+    const x = radius + textDistance * Math.cos(angleFromTop);
+    const y = radius + textDistance * Math.sin(angleFromTop);
+    
+    // Crear elemento del segmento (solo para referencia, no lo usamos para texto)
+    const segment = document.createElement('div');
+    segment.className = 'wheel-segment';
+    segment.style.transform = `rotate(${startAngle}deg)`;
+    wheel.appendChild(segment);
+    
+    // Crear nombre directamente en la ruleta con posición absoluta
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'wheel-name';
+    nameSpan.textContent = item.name;
+    nameSpan.style.fontSize = `${fontSize}px`;
+    nameSpan.style.left = `${x}px`;
+    nameSpan.style.top = `${y}px`;
+    // Rotar el texto para que sea legible (perpendicular al radio)
+    nameSpan.style.transform = `translate(-50%, -50%) rotate(${midAngleDeg + 90}deg)`;
+    wheel.appendChild(nameSpan);
+    
+    currentSegments.push({ element: segment, nameElement: nameSpan, data: item });
+  });
+  
+  // Crear gradiente de fondo
+  wheel.style.background = `conic-gradient(${gradientStops.join(', ')})`;
+  
+  // Mostrar asignación en la lista
+  showAssignmentList();
+}
+
+function showAssignmentList(winnerName = null) {
+  listEl.innerHTML = "";
+  
+  // Si hay un ganador, reorganizar la lista para ponerlo primero
+  let orderedAssignment = [...currentAssignment];
+  if (winnerName) {
+    const winnerIndex = orderedAssignment.findIndex(item => item.name === winnerName);
+    if (winnerIndex !== -1) {
+      // Mover el ganador al principio
+      const winner = orderedAssignment[winnerIndex];
+      orderedAssignment.splice(winnerIndex, 1);
+      orderedAssignment.unshift(winner);
+    }
+  }
+  
+  orderedAssignment.forEach((item, index) => {
+    const li = document.createElement("li");
+    const isWinner = winnerName && item.name === winnerName;
+    const winnerStyle = isWinner ? '; font-size: 1.1em; text-decoration: underline' : '';
+    li.innerHTML = `<span style="color: ${item.color.value}; font-weight: bold${winnerStyle};">${item.color.name}</span>: ${item.name}${isWinner ? ' 🏆' : ''}`;
+    listEl.appendChild(li);
+  });
+}
+
+function getWinnerName(finalAngle) {
+  // Normalizar el ángulo final (0-360)
+  const normalizedAngle = ((finalAngle % 360) + 360) % 360;
+  
+  // El puntero está fijo en la parte superior (0 grados en el sistema de coordenadas de la pantalla)
+  // Cuando la ruleta rota 'finalAngle' grados, el segmento que originalmente estaba en el ángulo 'angle'
+  // ahora está en el ángulo 'angle + finalAngle' (mod 360)
+  // Para encontrar qué segmento está bajo el puntero (0 grados), necesitamos:
+  // encontrar el segmento donde: (angle + finalAngle) mod 360 está cerca de 0
+  // Esto es equivalente a: angle mod 360 = (360 - finalAngle) mod 360
+  
+  const pointerAngle = (360 - normalizedAngle) % 360;
+  
+  // Encontrar el segmento que corresponde al puntero
+  for (let i = 0; i < currentAssignment.length; i++) {
+    const segment = currentAssignment[i];
+    let start = segment.angle;
+    let end = segment.angle + segment.segmentSize;
+    
+    // Normalizar para trabajar con 0-360
+    start = ((start % 360) + 360) % 360;
+    end = ((end % 360) + 360) % 360;
+    
+    // Determinar si el puntero está en este segmento
+    let inSegment = false;
+    
+    if (start <= end) {
+      // Segmento normal (no cruza 0)
+      inSegment = pointerAngle >= start && pointerAngle < end;
+    } else {
+      // Segmento que cruza el punto 0 (start > end)
+      inSegment = pointerAngle >= start || pointerAngle < end;
+    }
+    
+    if (inSegment) {
+      return segment.name;
+    }
+  }
+  
+  // Si no encontramos ningún segmento, buscar el más cercano
+  let closestSegment = currentAssignment[0];
+  let minDistance = Infinity;
+  
+  for (let i = 0; i < currentAssignment.length; i++) {
+    const segment = currentAssignment[i];
+    const midAngle = (segment.angle + segment.segmentSize / 2) % 360;
+    let distance = Math.abs(pointerAngle - midAngle);
+    if (distance > 180) distance = 360 - distance;
+    
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestSegment = segment;
+    }
+  }
+  
+  return closestSegment?.name || '—';
+}
+
+spinBtn.addEventListener('click', () => {
+  if (spinning) return;
+  const names = namesField.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  if (names.length < 2) {
+    alert("Ingresa al menos 2 nombres.");
+    return;
+  }
+  
+  spinning = true;
+  spinBtn.disabled = true;
+  clearBtn.disabled = true;
+  resultDisplay.textContent = '';
+  
+  // Crear la ruleta con asignación aleatoria
+  createWheel(names);
+  
+  // Animación de giro
+  const totalSpin = 360 * (5 + Math.random() * 3); // 5-8 vueltas
+  const randomFinalAngle = Math.random() * 360; // Ángulo final aleatorio
+  const finalAngle = totalSpin + randomFinalAngle;
+  const duration = 3000 + Math.random() * 1000; // 3-4 segundos
+  const start = performance.now();
+  
+  function animate(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    // Easing function para efecto de desaceleración realista
+    const easeOut = 1 - Math.pow(1 - progress, 4);
+    const currentAngle = finalAngle * easeOut;
+    wheel.style.transform = `rotate(${currentAngle}deg)`;
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      // Mostrar ganador
+      const winner = getWinnerName(finalAngle);
+      resultDisplay.textContent = `🎉 Ganador: ${winner}`;
+      resultDisplay.style.color = currentAssignment.find(a => a.name === winner)?.color.value || '#10b981';
+      
+      // Reordenar la lista para mostrar el ganador primero
+      showAssignmentList(winner);
+      
+      spinning = false;
+      spinBtn.disabled = false;
+      clearBtn.disabled = false;
+    }
+  }
+  
+  requestAnimationFrame(animate);
+});
+
+clearBtn.addEventListener('click', () => {
+  if (spinning) return;
+  namesField.value = "";
+  listEl.innerHTML = "";
+  resultDisplay.textContent = "";
+  wheel.innerHTML = "";
+  wheel.style.background = '';
+  wheel.style.transform = 'rotate(0deg)';
+  currentAssignment = [];
+  currentSegments = [];
+});
+</script>
+</body>
+</html>
